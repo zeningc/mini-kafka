@@ -1,4 +1,4 @@
-package minikafka
+package broker
 
 import (
 	"errors"
@@ -34,19 +34,20 @@ func (t *Topic) Name() string {
 }
 
 
-func (t *Topic) ReadFrom(offset int64, max int) []Message	{
+func (t *Topic) ReadFrom(offset int64, max int64) []Message	{
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	start := int(offset)
+	start := int64(offset)
 	if start < 0 {
 		start = 0
 	}
-	if start >= len(t.messages) {
+	length := int64(len(t.messages))
+	if start >= length {
 		return []Message{}
 	}
 	end := start + max
-	if end > len(t.messages) {
-		end = len(t.messages)
+	if end > length {
+		end = length
 	}
 	result := make([]Message, end-start)
 	copy(result, t.messages[start:end])

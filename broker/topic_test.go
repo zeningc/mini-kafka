@@ -1,4 +1,4 @@
-package minikafka
+package broker
 
 import (
 	"fmt"

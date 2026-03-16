@@ -1,6 +1,4 @@
-package minikafka
-
-
+package broker
 
 type Message struct	{
 	Value string
