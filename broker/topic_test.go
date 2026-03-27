@@ -6,8 +6,18 @@ import (
 	"testing"
 )
 
+func newTestTopic(t *testing.T, name string) *Topic {
+	t.Helper()
+	t.Chdir(t.TempDir())
+	topic, err := NewTopic(name)
+	if err != nil {
+		t.Fatalf("NewTopic: %v", err)
+	}
+	return topic
+}
+
 func TestNewTopic(t *testing.T) {
-	topic := NewTopic("test-topic")
+	topic := newTestTopic(t, "test-topic")
 	if topic == nil {
 		t.Fatal("NewTopic returned nil")
 	}
@@ -20,7 +30,7 @@ func TestNewTopic(t *testing.T) {
 }
 
 func TestAppend_ReturnsIncrementingOffsets(t *testing.T) {
-	topic := NewTopic("t")
+	topic := newTestTopic(t, "t")
 	for i := 0; i < 3; i++ {
 		offset, err := topic.Append(fmt.Sprintf("msg-%d", i))
 		if err != nil {
@@ -33,7 +43,7 @@ func TestAppend_ReturnsIncrementingOffsets(t *testing.T) {
 }
 
 func TestAppend_EmptyValue_ReturnsError(t *testing.T) {
-	topic := NewTopic("t")
+	topic := newTestTopic(t, "t")
 	offset, err := topic.Append("")
 	if err == nil {
 		t.Error("expected error for empty value, got nil")
@@ -44,7 +54,7 @@ func TestAppend_EmptyValue_ReturnsError(t *testing.T) {
 }
 
 func TestReadFrom_BasicRead(t *testing.T) {
-	topic := NewTopic("t")
+	topic := newTestTopic(t, "t")
 	topic.Append("a") // offset 0
 	topic.Append("b") // offset 1
 	topic.Append("c") // offset 2
@@ -62,7 +72,7 @@ func TestReadFrom_BasicRead(t *testing.T) {
 }
 
 func TestReadFrom_PartialRead(t *testing.T) {
-	topic := NewTopic("t")
+	topic := newTestTopic(t, "t")
 	topic.Append("a") // offset 0
 	topic.Append("b") // offset 1
 	topic.Append("c") // offset 2
@@ -77,7 +87,7 @@ func TestReadFrom_PartialRead(t *testing.T) {
 }
 
 func TestReadFrom_OutOfBounds(t *testing.T) {
-	topic := NewTopic("t")
+	topic := newTestTopic(t, "t")
 	topic.Append("a")
 
 	msgs := topic.ReadFrom(100, 10)
@@ -87,7 +97,7 @@ func TestReadFrom_OutOfBounds(t *testing.T) {
 }
 
 func TestAppend_ConcurrentSafety(t *testing.T) {
-	topic := NewTopic("t")
+	topic := newTestTopic(t, "t")
 	const goroutines = 100
 
 	var wg sync.WaitGroup

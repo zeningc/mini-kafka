@@ -21,7 +21,10 @@ func (b *Broker) AddTopic(topicName string) (*Topic, error) {
 	if _, ok := b.topics[topicName]; ok {
 		return nil, fmt.Errorf("topic %s already exists", topicName)
 	}
-	t := NewTopic(topicName)
+	t, err := NewTopic(topicName)
+	if err != nil	{
+		return nil, err
+	}
 	b.topics[topicName] = t
 	return t, nil
 }

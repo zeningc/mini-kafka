@@ -22,6 +22,7 @@ func newTestServer() (*APIServer, *http.ServeMux) {
 }
 
 func TestHandleCreateTopic_Success(t *testing.T) {
+	t.Chdir(t.TempDir())
 	_, mux := newTestServer()
 
 	req := httptest.NewRequest(http.MethodPost, "/topics/orders", nil)
@@ -34,6 +35,7 @@ func TestHandleCreateTopic_Success(t *testing.T) {
 }
 
 func TestHandleCreateTopic_Duplicate(t *testing.T) {
+	t.Chdir(t.TempDir())
 	_, mux := newTestServer()
 
 	for i, want := range []int{http.StatusCreated, http.StatusConflict} {
@@ -47,6 +49,7 @@ func TestHandleCreateTopic_Duplicate(t *testing.T) {
 }
 
 func TestHandleProduce_Success(t *testing.T) {
+	t.Chdir(t.TempDir())
 	_, mux := newTestServer()
 
 	httptest.NewRecorder() // create topic first
@@ -71,6 +74,7 @@ func TestHandleProduce_Success(t *testing.T) {
 }
 
 func TestHandleProduce_TopicNotFound(t *testing.T) {
+	t.Chdir(t.TempDir())
 	_, mux := newTestServer()
 
 	body, _ := json.Marshal(ProduceRequest{Value: "hello"})
@@ -85,6 +89,7 @@ func TestHandleProduce_TopicNotFound(t *testing.T) {
 }
 
 func TestHandleProduce_MalformedJSON(t *testing.T) {
+	t.Chdir(t.TempDir())
 	_, mux := newTestServer()
 	mux.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/topics/events", nil))
 
@@ -99,6 +104,7 @@ func TestHandleProduce_MalformedJSON(t *testing.T) {
 }
 
 func TestHandleConsume_Success(t *testing.T) {
+	t.Chdir(t.TempDir())
 	_, mux := newTestServer()
 
 	mux.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/topics/sensor-data", nil))
@@ -127,6 +133,7 @@ func TestHandleConsume_Success(t *testing.T) {
 }
 
 func TestHandleConsume_TopicNotFound(t *testing.T) {
+	t.Chdir(t.TempDir())
 	_, mux := newTestServer()
 
 	req := httptest.NewRequest(http.MethodGet, "/topics/nonexistent/messages?offset=0&max=10", nil)
@@ -139,6 +146,7 @@ func TestHandleConsume_TopicNotFound(t *testing.T) {
 }
 
 func TestHandleConsume_InvalidOffset(t *testing.T) {
+	t.Chdir(t.TempDir())
 	_, mux := newTestServer()
 	mux.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/topics/t", nil))
 
@@ -165,6 +173,7 @@ func TestHandleConsume_InvalidOffset(t *testing.T) {
 }
 
 func TestHandleConsume_InvalidMax(t *testing.T) {
+	t.Chdir(t.TempDir())
 	_, mux := newTestServer()
 	mux.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/topics/t", nil))
 
@@ -191,6 +200,7 @@ func TestHandleConsume_InvalidMax(t *testing.T) {
 }
 
 func TestRouting_UnknownRoute(t *testing.T) {
+	t.Chdir(t.TempDir())
 	_, mux := newTestServer()
 
 	req := httptest.NewRequest(http.MethodGet, "/unknown", nil)

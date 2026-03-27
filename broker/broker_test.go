@@ -16,6 +16,7 @@ func TestNewBroker(t *testing.T) {
 }
 
 func TestAddTopic_Successful(t *testing.T) {
+	t.Chdir(t.TempDir())
 	b := NewBroker()
 	topic, err := b.AddTopic("orders")
 	if err != nil {
@@ -30,6 +31,7 @@ func TestAddTopic_Successful(t *testing.T) {
 }
 
 func TestAddTopic_DuplicatePrevention(t *testing.T) {
+	t.Chdir(t.TempDir())
 	b := NewBroker()
 	first, err := b.AddTopic("orders")
 	if err != nil {
@@ -52,6 +54,7 @@ func TestAddTopic_DuplicatePrevention(t *testing.T) {
 }
 
 func TestGetTopic_Successful(t *testing.T) {
+	t.Chdir(t.TempDir())
 	b := NewBroker()
 	created, _ := b.AddTopic("orders")
 
@@ -76,6 +79,7 @@ func TestGetTopic_NotFound(t *testing.T) {
 }
 
 func TestBroker_EndToEnd(t *testing.T) {
+	t.Chdir(t.TempDir())
 	b := NewBroker()
 
 	_, err := b.AddTopic("events")
@@ -103,6 +107,7 @@ func TestBroker_EndToEnd(t *testing.T) {
 }
 
 func TestAddTopic_ConcurrentSafety(t *testing.T) {
+	t.Chdir(t.TempDir())
 	b := NewBroker()
 	const goroutines = 50
 
