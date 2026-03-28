@@ -39,3 +39,11 @@ func (b *Broker) GetTopic(topicName string) (*Topic, error) {
 		return t, nil
 	}
 }
+
+func (b *Broker) Close()	{
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for _, v := range b.topics	{
+		v.Close()
+	}
+}

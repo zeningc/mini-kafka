@@ -1,6 +1,7 @@
 package broker
 
 import (
+	"fmt"
 	"sync"
 	"testing"
 )
@@ -104,6 +105,56 @@ func TestBroker_EndToEnd(t *testing.T) {
 	if msgs[0].Value != "hello" || msgs[0].Offset != offset {
 		t.Errorf("expected {hello, %d}, got {%s, %d}", offset, msgs[0].Value, msgs[0].Offset)
 	}
+}
+
+func TestBroker_Close(t *testing.T) {
+	t.Chdir(t.TempDir())
+	b := NewBroker()
+
+	names := []string{"alpha", "beta", "gamma"}
+	for _, name := range names {
+		_, err := b.AddTopic(name)
+		if err != nil {
+			t.Fatalf("AddTopic(%s): %v", name, err)
+		}
+	}
+
+	b.Close()
+
+	// After Close, every topic's file is shut — Append must return an error.
+	for _, name := range names {
+		topic, _ := b.GetTopic(name)
+		_, err := topic.Append("post-close")
+		if err == nil {
+			t.Errorf("topic %q: expected error after Broker.Close, got nil", name)
+		}
+	}
+}
+
+// TestBroker_Close_ConcurrentAppends verifies that Close doesn't race with
+// appends happening on multiple topics simultaneously.
+func TestBroker_Close_ConcurrentAppends(t *testing.T) {
+	t.Chdir(t.TempDir())
+	b := NewBroker()
+
+	for _, name := range []string{"t1", "t2", "t3"} {
+		b.AddTopic(name)
+	}
+
+	var wg sync.WaitGroup
+	for _, name := range []string{"t1", "t2", "t3"} {
+		topic, _ := b.GetTopic(name)
+		for i := range 10 {
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+				topic.Append(fmt.Sprintf("msg-%d", i)) // may succeed or fail — must not race
+			}(i)
+		}
+	}
+
+	b.Close()
+	wg.Wait()
 }
 
 func TestAddTopic_ConcurrentSafety(t *testing.T) {

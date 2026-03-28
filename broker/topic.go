@@ -97,3 +97,9 @@ func (t *Topic) ReadFrom(offset int64, max int64, timeout time.Duration) []Messa
 	t.mu.RUnlock()
 	return result
 }
+
+func (t *Topic) Close() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.logStore.Close()
+}

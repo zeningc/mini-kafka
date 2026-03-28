@@ -135,6 +135,38 @@ func TestAppend_ConcurrentSafety(t *testing.T) {
 	}
 }
 
+// TestTopic_Close verifies that after Close, Append returns an error
+// (the underlying file is shut) and does not panic.
+func TestTopic_Close(t *testing.T) {
+	topic := newTestTopic(t, "t")
+	topic.Append("before-close")
+
+	topic.Close()
+
+	_, err := topic.Append("after-close")
+	if err == nil {
+		t.Error("expected error from Append after Close, got nil")
+	}
+}
+
+// TestTopic_Close_ConcurrentAppend verifies that Close waits for an
+// in-flight Append to finish rather than racing with it.
+func TestTopic_Close_ConcurrentAppend(t *testing.T) {
+	topic := newTestTopic(t, "t")
+
+	var wg sync.WaitGroup
+	for i := range 20 {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			topic.Append(fmt.Sprintf("msg-%d", i)) // may succeed or fail — must not race
+		}(i)
+	}
+
+	topic.Close()
+	wg.Wait()
+}
+
 // TestReadFrom_WaitUnblocksOnAppend verifies that a consumer blocked on a future
 // offset is woken immediately when a producer appends.
 func TestReadFrom_WaitUnblocksOnAppend(t *testing.T) {
