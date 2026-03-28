@@ -3,6 +3,8 @@ package broker
 import (
 	"errors"
 	"sync"
+	"time"
+
 	"github.com/zeningc/mini-kafka/storage"
 )
 
@@ -12,6 +14,7 @@ type Topic struct	{
 	nextOffset int64
 	logStore *storage.LogStore
 	mu sync.RWMutex
+	notifyCh chan struct {}
 }
 
 func NewTopic(name string) (*Topic, error) {
@@ -23,8 +26,13 @@ func NewTopic(name string) (*Topic, error) {
 	if err != nil	{
 		return nil, err
 	}
-
-	return &Topic{name: name, messages: messages, logStore: logStore, nextOffset: int64(len(messages))}, nil
+	return &Topic{
+		name: name,
+		messages: messages,
+		logStore: logStore,
+		nextOffset: int64(len(messages)),
+		notifyCh: make(chan struct{}),
+	}, nil
 }
 
 func (t *Topic) Append(value string) (int64, error)	{
@@ -40,6 +48,8 @@ func (t *Topic) Append(value string) (int64, error)	{
 	}
 	t.messages = append(t.messages, msg)
 	t.nextOffset++
+	close(t.notifyCh)
+	t.notifyCh = make(chan struct{})
 	return nextOffSet, nil
 }
 
@@ -48,22 +58,42 @@ func (t *Topic) Name() string {
 }
 
 
-func (t *Topic) ReadFrom(offset int64, max int64) []Message	{
+func (t *Topic) ReadFrom(offset int64, max int64, timeout time.Duration) []Message {
+	if offset < 0 {
+		offset = 0
+	}
+
 	t.mu.RLock()
-	defer t.mu.RUnlock()
-	start := int64(offset)
-	if start < 0 {
-		start = 0
+
+	if timeout > 0 {
+		timer := time.NewTimer(timeout)
+		defer timer.Stop()
+
+		for offset >= t.nextOffset {
+			ch := t.notifyCh // capture while holding lock
+			t.mu.RUnlock()
+			select {
+			case <-ch:
+				t.mu.RLock() // re-acquire and loop back to recheck
+			case <-timer.C:
+				return []Message{} // lock not held — safe to return directly
+			}
+		}
+		// lock is held here; fall through to read
+	} else {
+		if offset >= t.nextOffset {
+			t.mu.RUnlock()
+			return []Message{}
+		}
 	}
+
 	length := int64(len(t.messages))
-	if start >= length {
-		return []Message{}
-	}
-	end := start + max
+	end := offset + max
 	if end > length {
 		end = length
 	}
-	result := make([]Message, end-start)
-	copy(result, t.messages[start:end])
+	result := make([]Message, end-offset)
+	copy(result, t.messages[offset:end])
+	t.mu.RUnlock()
 	return result
 }

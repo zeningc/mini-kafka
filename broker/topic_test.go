@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 )
 
 func newTestTopic(t *testing.T, name string) *Topic {
@@ -59,7 +60,7 @@ func TestReadFrom_BasicRead(t *testing.T) {
 	topic.Append("b") // offset 1
 	topic.Append("c") // offset 2
 
-	msgs := topic.ReadFrom(0, 10)
+	msgs := topic.ReadFrom(0, 10, 0)
 	if len(msgs) != 3 {
 		t.Fatalf("expected 3 messages, got %d", len(msgs))
 	}
@@ -77,7 +78,7 @@ func TestReadFrom_PartialRead(t *testing.T) {
 	topic.Append("b") // offset 1
 	topic.Append("c") // offset 2
 
-	msgs := topic.ReadFrom(1, 1)
+	msgs := topic.ReadFrom(1, 1, 0)
 	if len(msgs) != 1 {
 		t.Fatalf("expected 1 message, got %d", len(msgs))
 	}
@@ -90,7 +91,7 @@ func TestReadFrom_OutOfBounds(t *testing.T) {
 	topic := newTestTopic(t, "t")
 	topic.Append("a")
 
-	msgs := topic.ReadFrom(100, 10)
+	msgs := topic.ReadFrom(100, 10, 0)
 	if len(msgs) != 0 {
 		t.Errorf("expected empty slice, got %d messages", len(msgs))
 	}
@@ -131,5 +132,76 @@ func TestAppend_ConcurrentSafety(t *testing.T) {
 	}
 	if topic.nextOffset != goroutines {
 		t.Errorf("expected nextOffset %d, got %d", goroutines, topic.nextOffset)
+	}
+}
+
+// TestReadFrom_WaitUnblocksOnAppend verifies that a consumer blocked on a future
+// offset is woken immediately when a producer appends.
+func TestReadFrom_WaitUnblocksOnAppend(t *testing.T) {
+	topic := newTestTopic(t, "t")
+
+	result := make(chan []Message, 1)
+	go func() {
+		// offset 0 doesn't exist yet — should block until Append fires
+		result <- topic.ReadFrom(0, 1, 5*time.Second)
+	}()
+
+	// Give the goroutine time to enter the wait
+	time.Sleep(20 * time.Millisecond)
+
+	topic.Append("hello")
+
+	select {
+	case msgs := <-result:
+		if len(msgs) != 1 || msgs[0].Value != "hello" {
+			t.Errorf("expected [{hello 0}], got %+v", msgs)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("ReadFrom did not unblock after Append")
+	}
+}
+
+// TestReadFrom_WaitTimeout verifies that a consumer returns an empty slice
+// when no message arrives within the timeout window.
+func TestReadFrom_WaitTimeout(t *testing.T) {
+	topic := newTestTopic(t, "t")
+
+	start := time.Now()
+	msgs := topic.ReadFrom(0, 10, 100*time.Millisecond)
+	elapsed := time.Since(start)
+
+	if len(msgs) != 0 {
+		t.Errorf("expected empty slice on timeout, got %+v", msgs)
+	}
+	if elapsed < 100*time.Millisecond {
+		t.Errorf("returned too early: %v", elapsed)
+	}
+}
+
+// TestReadFrom_WaitBroadcast verifies that multiple blocked consumers are all
+// woken when a single Append fires.
+func TestReadFrom_WaitBroadcast(t *testing.T) {
+	topic := newTestTopic(t, "t")
+	const consumers = 5
+
+	results := make(chan []Message, consumers)
+	for range consumers {
+		go func() {
+			results <- topic.ReadFrom(0, 1, 5*time.Second)
+		}()
+	}
+
+	time.Sleep(20 * time.Millisecond)
+	topic.Append("broadcast")
+
+	for range consumers {
+		select {
+		case msgs := <-results:
+			if len(msgs) != 1 || msgs[0].Value != "broadcast" {
+				t.Errorf("consumer got unexpected messages: %+v", msgs)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("a consumer did not unblock after Append")
+		}
 	}
 }

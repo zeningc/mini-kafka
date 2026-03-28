@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/zeningc/mini-kafka/broker"
 )
@@ -209,5 +210,80 @@ func TestRouting_UnknownRoute(t *testing.T) {
 
 	if w.Code != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", w.Code)
+	}
+}
+
+func TestHandleConsume_WaitUnblocksOnProduce(t *testing.T) {
+	t.Chdir(t.TempDir())
+	_, mux := newTestServer()
+
+	mux.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/topics/events", nil))
+
+	result := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		req := httptest.NewRequest(http.MethodGet, "/topics/events/messages?offset=0&max=10&wait=5s", nil)
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		result <- w
+	}()
+
+	time.Sleep(20 * time.Millisecond)
+
+	body, _ := json.Marshal(ProduceRequest{Value: "triggered!"})
+	req := httptest.NewRequest(http.MethodPost, "/topics/events/messages", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(httptest.NewRecorder(), req)
+
+	select {
+	case w := <-result:
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", w.Code)
+		}
+		var resp ConsumeResponse
+		json.NewDecoder(w.Body).Decode(&resp)
+		if len(resp.Messages) != 1 || resp.Messages[0].Value != "triggered!" {
+			t.Errorf("unexpected messages: %+v", resp.Messages)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("consume did not unblock after produce")
+	}
+}
+
+func TestHandleConsume_WaitTimeout(t *testing.T) {
+	t.Chdir(t.TempDir())
+	_, mux := newTestServer()
+
+	mux.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/topics/events", nil))
+
+	start := time.Now()
+	req := httptest.NewRequest(http.MethodGet, "/topics/events/messages?offset=0&max=10&wait=100ms", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	elapsed := time.Since(start)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	var resp ConsumeResponse
+	json.NewDecoder(w.Body).Decode(&resp)
+	if len(resp.Messages) != 0 {
+		t.Errorf("expected empty messages on timeout, got %+v", resp.Messages)
+	}
+	if elapsed < 100*time.Millisecond {
+		t.Errorf("returned too early: %v", elapsed)
+	}
+}
+
+func TestHandleConsume_InvalidWait(t *testing.T) {
+	t.Chdir(t.TempDir())
+	_, mux := newTestServer()
+	mux.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/topics/t", nil))
+
+	req := httptest.NewRequest(http.MethodGet, "/topics/t/messages?offset=0&max=10&wait=notaduration", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
 	}
 }

@@ -97,7 +97,7 @@ func TestBroker_EndToEnd(t *testing.T) {
 		t.Fatalf("Append: %v", err)
 	}
 
-	msgs := topic.ReadFrom(offset, 1)
+	msgs := topic.ReadFrom(offset, 1, 0)
 	if len(msgs) != 1 {
 		t.Fatalf("expected 1 message, got %d", len(msgs))
 	}

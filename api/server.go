@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/zeningc/mini-kafka/broker"
 )
@@ -71,6 +72,14 @@ func (s *APIServer) HandleConsume(w http.ResponseWriter, r *http.Request)	{
 		s.writeJSONError(w, "invalid offset", http.StatusBadRequest)
 		return
 	}
+	var wait time.Duration
+	if waitStr := r.URL.Query().Get("wait"); waitStr != "" {
+		wait, err = time.ParseDuration(waitStr)
+		if err != nil || wait < 0 {
+			s.writeJSONError(w, "invalid wait", http.StatusBadRequest)
+			return
+		}
+	}
 
 	limitStr := r.URL.Query().Get("max")
 	limit, err := strconv.ParseInt(limitStr, 10, 64)
@@ -78,7 +87,7 @@ func (s *APIServer) HandleConsume(w http.ResponseWriter, r *http.Request)	{
 		s.writeJSONError(w, "invalid max", http.StatusBadRequest)
 		return
 	}
-	messages := t.ReadFrom(start, limit)
+	messages := t.ReadFrom(start, limit, wait)
 	resp := ConsumeResponse{Messages: messages}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
